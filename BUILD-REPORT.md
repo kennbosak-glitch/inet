@@ -611,3 +611,33 @@ Kenn installs v0.2.7 over v0.2.6 and taps the fourth button, **"Test: start regi
 - **PROBE FAILED with a thrown exception whose frames sit in RegistrationManagerImpl / IntentLauncherImpl** → the launch machinery itself threw (attestation/config reads live there; the CLIENT_TOKEN placeholder, cleared for init in the v0.2.2 audit, is the named suspect for the registration leg specifically, since the intent carries attestation material).
 - **Any NEW NoClassDefFoundError / NoSuchFieldError naming an `R$` class** → would contradict this section's audit (0 unresolved at class and field level across both dexes); if it appears, the installed APK is not this artifact — verify the sha256 of the installed build first.
 - **Shell won't open at all** → unchanged from prior trees: below the activity class graph (proven identical in kind to v0.2.6 — same sources, version strings aside), and the hunt leaves DAT entirely.
+
+---
+
+## 2026-10-24 — Postmortem: the isDevMode wall was (partly) ours
+
+> "Two days, three phones, a portal, a red team — and the culprit was sitting in our own manifest wearing a name tag that said PENDING."
+
+Filed publicly because every trap below is one any DAT developer can fall into. All findings verified against our own code, the shipped binaries (aapt), and device logs.
+
+**Where we ended up (2026-10-24, Seeker host, Meta AI v296):** Developer Mode ON, iNet REGISTERED via Meta AI's real consent surface ("Connect Skynet Bridge to your Meta devices? — Release channel Beta 1.0.0"), ACDC logcat: "secure registration successful", known devices: 1 — and `Wearables.isDevMode` still reads **false**, with the devicesMetadata feed frozen on a single static DISCONNECTED record. Registration is solved; two gates remain (the flag, the feed).
+
+**What the audit found in our own house (ZERO-BUILD-AUDIT, 2026-10-24):**
+
+1. **No shipped build was ever a true 0/0 build.** v0.4.1 ("devmode-id0") = APPLICATION_ID `0` + CLIENT_TOKEN still the literal placeholder `PENDING_FROM_DEV_CENTER`. v0.4.2/v0.4.3 = real APPLICATION_ID + real token. Meta's documented DevMode precondition (ID and token both 0) had never once been satisfied.
+2. **The registration host was the wrong activity type.** Our MainActivity extends plain `android.app.Activity`. With a plain-Activity host, the SDK launches the registration handoff via `startActivityForResult` and consumes no result itself — so the activity-result path that sets `isDevMode` never executes. Meta's CameraAccess sample passes a `ComponentActivity`. Our own code comments described this behavior; nobody connected it to the flag.
+3. **`startRegistration()` was called unconditionally.** Per facebook/meta-wearables-dat-android#192, calling it while already REGISTERED can silently reset `isDevMode`. Our "Already REGISTERED" handling was report text, not a guard — the call fired anyway.
+4. **`isDevMode` was never gated on.** It was read into every probe panel for display; session creation never checked it.
+
+**Outside references that named the mechanism (Meta staff, via the linked issues):** #197 — `isDevMode` is set only from the result Meta AI returns to the activity passed to `startRegistration()`; registration state and the dev flag are separate steps, and REGISTERED + isDevMode=false is not an expected state on a Developer Mode build; while false, sessions reach the glasses marked non-DevMode. #214 — registration failures on specific Meta AI builds can also be Meta-side; record your Meta AI build number with every result.
+
+**One more tell worth checking in your own runs:** our successful consent named a *release channel*. Developer Mode apps skip attestation and release channels entirely; the release-channel connect flow (tester invite, channel pick) is the Developer-Mode-OFF path for a real App ID. If your consent surface names a channel, you may have registered as a production app — in which case isDevMode=false is an accurate reading, not a lost flag.
+
+**The fix in flight (v0.4.4-zero):** APPLICATION_ID `"0"` and CLIENT_TOKEN `"0"` (both via string resources — a bare `"0"` literal hits an integer-typing trap), MainActivity migrated to `ComponentActivity`, a REGISTERED guard in front of `startRegistration()`, an `isDevMode` gate in front of session creation, and a clean-state run protocol (clear storage, re-grant, one registration call, then read the flag warm).
+
+**Traps for other DAT developers, collected the expensive way:**
+
+- Audit the values in the **shipped binary** (aapt), not your source comments. Our manifest comment still claimed the token was a placeholder weeks after it wasn't — and vice versa in the build that mattered.
+- In Meta AI v296, the Developer Mode surface is **hidden behind tapping the App version row** in Settings → App Info (the Android build-number ritual). Two exhaustive automated UI sweeps read that page and concluded the surface did not exist. "The row isn't there" is not "the surface doesn't exist."
+- A DAT app's **Nearby devices** grant must be full **Allow**; "Allow only while using the app" silently starves the metadata feed (registration still works, which makes it a nasty decoy).
+- Meta AI supports **one Developer Mode app at a time** — registering a second DAT app (including the official sample) can reset the first app's dev registration. Sequence your control tests accordingly.
