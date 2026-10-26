@@ -20,6 +20,19 @@ The glasses are registered to this app. The whole pre-session stack — class gr
 
 **Honesty rail:** registration is complete. **Session creation — the live camera/mic conversation itself — is the next build and is NOT built yet.** When it lands, it will say so here, with its own receipts.
 
+
+### Update — Oct 24, 2026: FIRST LIGHT ✅
+
+The session the Oct 22 status called "not built yet" has since run on real hardware. Verified findings, with receipts from the capability lab:
+
+- **Full DAT session achieved** — 2,041 video frames and a photo captured through the SDK.
+- **444 IMU samples** captured.
+- **On-glasses speech** works.
+- **Double-tap touchpad → Select (CAPTOUCH) event** proven — the doorbell for Note to Self.
+- Bounds learned the same day: forward swipe is a volume gesture only (never exposed to the app), and the capture button is physically dead on this unit — capture routes are DAT photos, "Hey Meta" voice capture, and Ghost Triggers.
+
+Still pending, kept separate on purpose: the Note to Self build itself and the production (real-ID) path. Registration status above stands as the Oct 22 record.
+
 ## The road here — three walls, in order
 
 Kenn announced iNet before it worked ([his tease, Oct 22](https://x.com/KennethBosak/status/2113231192497512828)). Three walls fell in order:
